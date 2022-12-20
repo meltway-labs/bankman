@@ -13,6 +13,7 @@
 export interface Env {
 	NORDIGEN_SECRET_ID: string;
 	NORDIGEN_SECRET_KEY: string;
+	NORDIGEN_ACCOUNT_ID: string;
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
 	// MY_KV_NAMESPACE: KVNamespace;
 	//
@@ -25,10 +26,8 @@ export interface Env {
 
 const nordigenHost = "https://ob.nordigen.com"
 
-const nordigenNewToken = "/api/v2/token/new/"
-
 async function fetchNordigenToken(secretId: string, secretKey: string) {
-	const resp = await fetch(nordigenHost + nordigenNewToken, {
+	const resp = await fetch(nordigenHost + "/api/v2/token/new/", {
 		method: "POST",
 		headers: {
 			"Accept": "application/json",
@@ -43,14 +42,44 @@ async function fetchNordigenToken(secretId: string, secretKey: string) {
 	return resp.json().then((data: any) => data.access);
 }
 
+async function fetchNordigenTransactions(
+	token: string,
+	accountId: string,
+	dateFrom: string,
+	dateTo: string,
+) {
+	const params = new URLSearchParams({
+		date_from: dateFrom,
+		date_to: dateTo,
+	}).toString();
+
+	const url = nordigenHost + `/api/v2/accounts/${accountId}/transactions/?` + params;
+
+	const resp = await fetch(url, {
+		method: "GET",
+		headers: {
+			"Accept": "application/json",
+			"Content-Type": "application/json",
+			"Authorization": "Bearer " + token
+		},
+	});
+
+	return resp.json().then((data: any) => data);
+}
+
 export default {
 	async scheduled(
 		controller: ScheduledController,
 		env: Env,
 		ctx: ExecutionContext
 	): Promise<void> {
-		const token = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
+		const access = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
 
-		console.log(`Token`, token);
+		const dateFrom = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString().substring(0, 10);	// 24 hours ago
+		const dateTo = new Date(Date.now()).toISOString().substring(0, 10); // today
+
+		const transactions = await fetchNordigenTransactions(access, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
+
+		console.log(transactions);
 	},
 };

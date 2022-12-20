@@ -9,6 +9,7 @@
     ```
     NORDIGEN_SECRET_ID=<secret>
     NORDIGEN_SECRET_KEY=<secret>
+    NORDIGEN_ACCOUNT_ID=<account_id>
     ```
 
 3. Install the dependencies:
