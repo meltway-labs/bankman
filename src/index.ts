@@ -11,6 +11,8 @@
  */
 
 export interface Env {
+	NORDIGEN_SECRET_ID: string;
+	NORDIGEN_SECRET_KEY: string;
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
 	// MY_KV_NAMESPACE: KVNamespace;
 	//
@@ -44,7 +46,7 @@ async function fetchNordigenToken(secretId: string, secretKey: string) {
 export default {
 	async scheduled(
 		controller: ScheduledController,
-		env: Env & { NORDIGEN_SECRET_ID: string, NORDIGEN_SECRET_KEY: string },
+		env: Env,
 		ctx: ExecutionContext
 	): Promise<void> {
 		const token = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
