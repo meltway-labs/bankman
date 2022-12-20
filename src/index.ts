@@ -21,35 +21,34 @@ export interface Env {
 	// MY_BUCKET: R2Bucket;
 }
 
-// myfetch from ifconfig.co and print ip address
-function myfetch(url: string) {
-	return new Promise((resolve, reject) => {
-		const req = new Request(url, {
-			method: "GET",
-		});
+const nordigenHost = "https://ob.nordigen.com"
 
-		fetch(req)
-			.then((res) => {
-				resolve(res);
-			})
-			.catch((err) => {
-				reject(err);
-			});
+const nordigenNewToken = "/api/v2/token/new/"
+
+async function fetchNordigenToken(secretId: string, secretKey: string) {
+	const resp = await fetch(nordigenHost + nordigenNewToken, {
+		method: "POST",
+		headers: {
+			"Accept": "application/json",
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify({
+			"secret_id": secretId,
+			"secret_key": secretKey,
+		}),
 	});
-}
 
-type Response = {
-	ip: string;
-};
+	return resp.json().then((data: any) => data.access);
+}
 
 export default {
 	async scheduled(
 		controller: ScheduledController,
-		env: Env,
+		env: Env & { NORDIGEN_SECRET_ID: string, NORDIGEN_SECRET_KEY: string },
 		ctx: ExecutionContext
 	): Promise<void> {
-		const resp = await fetch("https://ifconfig.co/json");
+		const token = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
 
-		resp.json().then((value: any) => { console.log(`Hello World!`, value.ip) });
+		console.log(`Token`, token);
 	},
 };
