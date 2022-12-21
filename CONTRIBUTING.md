@@ -11,6 +11,8 @@
     NORDIGEN_SECRET_ID=<secret>
     NORDIGEN_SECRET_KEY=<secret>
     NORDIGEN_ACCOUNT_ID=<account_id>
+    NOTIFY_PATTERN=<pattern>
+    DISCORD_URL=<discord-webhook-url>
     ```
 
 3. Install the dependencies:
@@ -40,7 +42,7 @@
 
 8. Push secrets for this worker:
     ```shell
-    wrangler secret:bulk <(cat .dev.vars | sed "s/^/\"/g" | sed "s/=/\":\"/g" | sed "s/$/\",/g" | tr -d '\n' | sed "s/^/{/" | tr -s ',' | sed "s/,$/}/")
+    wrangler secret:bulk <(cat .dev.vars | sed 's/"//g' | sed "s/^/\"/g" | sed "s/=/\":\"/g" | sed "s/$/\",/g" | tr -d '\n' | sed "s/^/{/" | tr -s ',' | sed "s/,$/}/")
     ```
 
 9. Run the project locally:
