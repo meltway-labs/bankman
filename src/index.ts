@@ -14,19 +14,29 @@ export interface Env {
 	NORDIGEN_SECRET_ID: string;
 	NORDIGEN_SECRET_KEY: string;
 	NORDIGEN_ACCOUNT_ID: string;
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
+	DB: D1Database;
+}
+
+type BankTransaction = {
+	transactionId: string;
+	bookingDate: string;
+	valueDate: string;
+	remittanceInformationUnstructured: string;
+}
+
+type NordigenTransactions = {
+	transactions: {
+		booked: BankTransaction[];
+		pending: BankTransaction[];
+	}
 }
 
 const nordigenHost = "https://ob.nordigen.com"
 
-async function fetchNordigenToken(secretId: string, secretKey: string) {
+async function fetchNordigenToken(
+	secretId: string,
+	secretKey: string,
+): Promise<string> {
 	const resp = await fetch(nordigenHost + "/api/v2/token/new/", {
 		method: "POST",
 		headers: {
@@ -47,7 +57,7 @@ async function fetchNordigenTransactions(
 	accountId: string,
 	dateFrom: string,
 	dateTo: string,
-) {
+): Promise<NordigenTransactions> {
 	const params = new URLSearchParams({
 		date_from: dateFrom,
 		date_to: dateTo,
@@ -67,6 +77,25 @@ async function fetchNordigenTransactions(
 	return resp.json().then((data: any) => data);
 }
 
+async function storeBankTransactions(
+	db: D1Database,
+	transactions: BankTransaction[],
+) {
+	const statements = transactions.map(transaction => db.prepare(
+		`
+			INSERT INTO bank_transactions
+			(id, booking_date, value_date, blob)
+			VALUES
+			(?, ?, ?, ?)
+			ON CONFLICT (id) DO NOTHING;
+		`
+	).bind(transaction.transactionId, transaction.bookingDate, transaction.valueDate, JSON.stringify(transaction)));
+
+	const result = await db.batch(statements);
+
+	console.log(result);
+}
+
 export default {
 	async scheduled(
 		controller: ScheduledController,
@@ -75,11 +104,18 @@ export default {
 	): Promise<void> {
 		const access = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
 
-		const dateFrom = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString().substring(0, 10);	// 24 hours ago
+		// one day in milliseconds
+		const oneDay =  1000 * 60 * 60 * 24;
+
+		const dateFrom = new Date(Date.now() - 20 * oneDay).toISOString().substring(0, 10); // X days ago
 		const dateTo = new Date(Date.now()).toISOString().substring(0, 10); // today
 
-		const transactions = await fetchNordigenTransactions(access, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
+		const results = await fetchNordigenTransactions(access, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
 
-		console.log(transactions);
+		console.log(results);
+		console.log("booked", results.transactions.booked);
+		console.log("pending", results.transactions.pending);
+
+		await storeBankTransactions(env.DB, results.transactions.booked);
 	},
 };
