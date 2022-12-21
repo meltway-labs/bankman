@@ -11,7 +11,7 @@
 		}
 	},
 	"postCreateCommand": "npm install",
-	"remoteEnv": {
+	"containerEnv": {
 		"NO_D1_WARNING": "true"
 	}
 
