@@ -21,17 +21,6 @@ export interface Env {
 	DB: D1Database;
 }
 
-type BankTransaction = {
-	transactionId: string;
-	bookingDate: string;
-	valueDate: string;
-	remittanceInformationUnstructured: string;
-	transactionAmount: {
-		amount: string;
-		currency: string;
-	}
-}
-
 // one day in milliseconds
 const ONE_DAY_MS =  1000 * 60 * 60 * 24;
 // days before today to fetch transactions from
@@ -40,6 +29,8 @@ const DAYS_TO_FETCH = 2;
 const NOTIFY_EXPIRATION_DAYS = 7;
 // key in KV to store date when we last notified agreement expiration
 const NOTIFY_EXPIRATION_KEY = "agreement-expiration-notified";
+// Nordigen API host
+const NORDIGEN_HOST = "https://ob.nordigen.com"
 
 // checks in KV if we notified agreement expiration today
 async function checkNotifiedToday(kv: KVNamespace): Promise<boolean> {
@@ -54,6 +45,17 @@ async function markNotifiedToday(kv: KVNamespace): Promise<void> {
 	await kv.put(NOTIFY_EXPIRATION_KEY, today);
 }
 
+type BankTransaction = {
+	transactionId: string;
+	bookingDate: string;
+	valueDate: string;
+	remittanceInformationUnstructured: string;
+	transactionAmount: {
+		amount: string;
+		currency: string;
+	}
+}
+
 type NordigenTransactions = {
 	transactions: {
 		booked: BankTransaction[];
@@ -61,13 +63,11 @@ type NordigenTransactions = {
 	}
 }
 
-const nordigenHost = "https://ob.nordigen.com"
-
 async function fetchNordigenToken(
 	secretId: string,
 	secretKey: string,
 ): Promise<string> {
-	const resp = await fetch(nordigenHost + "/api/v2/token/new/", {
+	const resp = await fetch(NORDIGEN_HOST + "/api/v2/token/new/", {
 		method: "POST",
 		headers: {
 			"Accept": "application/json",
@@ -93,7 +93,7 @@ async function fetchNordigenTransactions(
 		date_to: dateTo,
 	}).toString();
 
-	const url = nordigenHost + `/api/v2/accounts/${accountId}/transactions/?` + params;
+	const url = NORDIGEN_HOST + `/api/v2/accounts/${accountId}/transactions/?` + params;
 
 	const resp = await fetch(url, {
 		method: "GET",
@@ -115,8 +115,8 @@ async function fetchNordigenAgreementExpiration(
 	const byId = id && id !== "";
 
 	const url = byId ?
-		nordigenHost + `/api/v2/agreements/enduser/${id}/`:
-		nordigenHost + `/api/v2/agreements/enduser/?limit=1`;
+		NORDIGEN_HOST + `/api/v2/agreements/enduser/${id}/`:
+		NORDIGEN_HOST + `/api/v2/agreements/enduser/?limit=1`;
 
 	const resp = await fetch(url, {
 		headers: {
