@@ -9,3 +9,7 @@ crons = [ "0 * * * *" ]
 binding = "DB"
 database_name = "bankmandb"
 database_id = "DATABASE_ID"
+
+kv_namespaces = [
+    { binding = "BANKMAN_KV", id = "KV_ID" }
+]

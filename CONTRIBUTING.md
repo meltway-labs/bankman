@@ -25,32 +25,42 @@
     cp wrangler.toml.template wrangler.toml
     ```
 
-5. Create a D1 for bankman:
+5. Create a KV for bankman:
+    ```shell
+    wrangler kv:namespace create "BANKMAN_KV"
+    ```
+
+6. Copy the KV ID from previous command to your wrangler.toml:
+    ```shell
+    sed -i wrangler.toml "s/KV_ID/$(wrangler kv:namespace list | grep BANKMAN_KV -B1 | head -n1 | cut -d'"' -f4)/"
+    ```
+
+7. Create a D1 for bankman:
     ```shell
     wrangler d1 create bankmandb
     ```
 
-6. Copy the database ID from previous command to your wrangler.toml:
+8. Copy the database ID from previous command to your wrangler.toml:
     ```shell
     sed -i wrangler.toml "s/DATABASE_ID/$(wrangler d1 list | grep bankman | awk '{print $2}')/"
     ```
 
-7. Run database migrations:
+9. Run database migrations:
     ```shell
     wrangler d1 migrations apply bankman
     ```
 
-8. Push secrets for this worker:
+10. Push secrets for this worker:
     ```shell
     wrangler secret:bulk <(cat .dev.vars | sed 's/"//g' | sed "s/^/\"/g" | sed "s/=/\":\"/g" | sed "s/$/\",/g" | tr -d '\n' | sed "s/^/{/" | tr -s ',' | sed "s/,$/}/")
     ```
 
-9. Run the project locally:
+11. Run the project locally:
     ```shell
     npm start
     ```
 
-10. The project runs every minute, but if you want to manually trigger an event, run the following:
+12. The project runs every minute, but if you want to manually trigger an event, run the following:
     ```shell
     curl "http://localhost:8787/cdn-cgi/mf/scheduled"
     ```
