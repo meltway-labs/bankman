@@ -17,12 +17,12 @@ export interface Env {
 	NORDIGEN_AGREEMENT_ID: string;
 	NOTIFY_PATTERN: string;
 	DISCORD_URL: string;
-	BANKMAN_KV: KVNamespace;
+	KV: KVNamespace;
 	DB: D1Database;
 }
 
 // one day in milliseconds
-const ONE_DAY_MS =  1000 * 60 * 60 * 24;
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 // days before today to fetch transactions from
 const DAYS_TO_FETCH = 2;
 // notify expiration once a day under X days
@@ -115,7 +115,7 @@ async function fetchNordigenAgreementExpiration(
 	const byId = id && id !== "";
 
 	const url = byId ?
-		NORDIGEN_HOST + `/api/v2/agreements/enduser/${id}/`:
+		NORDIGEN_HOST + `/api/v2/agreements/enduser/${id}/` :
 		NORDIGEN_HOST + `/api/v2/agreements/enduser/?limit=1`;
 
 	const resp = await fetch(url, {
@@ -143,7 +143,7 @@ async function fetchNordigenAgreementExpiration(
 
 	const expiryDate = (new Date(agreement.accepted)).getTime() + ONE_DAY_MS * agreement.access_valid_for_days;
 
-	return (expiryDate - Date.now())/ONE_DAY_MS
+	return (expiryDate - Date.now()) / ONE_DAY_MS
 }
 
 async function storeBankTransactions(
@@ -237,11 +237,11 @@ async function doExecute(env: Env) {
 	// check agreement expiration and notify if needed
 	const expirationDays = await fetchNordigenAgreementExpiration(token, env.NORDIGEN_AGREEMENT_ID);
 	if (expirationDays <= NOTIFY_EXPIRATION_DAYS) {
-		const hasNotifiedToday = await checkNotifiedToday(env.BANKMAN_KV);
+		const hasNotifiedToday = await checkNotifiedToday(env.KV);
 		if (!hasNotifiedToday) {
 			const message = `End user agreement expires in ${expirationDays} days.`;
 			await notifyDiscord(env.DISCORD_URL, message);
-			await markNotifiedToday(env.BANKMAN_KV);
+			await markNotifiedToday(env.KV);
 		}
 	}
 
@@ -305,12 +305,12 @@ export default {
 	},
 
 	// Uncomment lines below to allow invoking with fetch.
-	// async fetch(
-	// 	request: RequestInit,
-	// 	env: Env,
-	// 	context: ExecutionContext,
-	// ): Promise<Response> {
-	// 	await execute(env);
-	// 	return Response.json({status: "ok"})
-	// }
+	async fetch(
+		request: RequestInit,
+		env: Env,
+		context: ExecutionContext,
+	): Promise<Response> {
+		await execute(env);
+		return Response.json({ status: "ok" })
+	}
 };

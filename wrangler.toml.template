@@ -8,8 +8,8 @@ crons = [ "0 * * * *" ]
 [[ d1_databases ]]
 binding = "DB"
 database_name = "bankmandb"
-database_id = "DATABASE_ID"
+database_id = "$DATABASE_ID"
 
 kv_namespaces = [
-    { binding = "BANKMAN_KV", id = "KV_ID" }
+    { binding = "KV", id = "$KV_ID" }
 ]

@@ -1,6 +1,6 @@
 {
   "name": "bankman",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20221111.1",
     "better-sqlite3": "^7.6.2",
@@ -9,7 +9,8 @@
   },
   "private": true,
   "scripts": {
-    "start": "wrangler dev --local",
-    "deploy": "wrangler publish"
+    "bootstrap": "./scripts/bootstrap.sh",
+    "deploy": "wrangler publish --name bankman",
+    "start": "wrangler dev --local"
   }
 }
