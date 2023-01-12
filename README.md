@@ -36,16 +36,31 @@ In order to send notifications, we currently only support Discord Webhooks.
     NORDIGEN_SECRET_ID=<secret>
     NORDIGEN_SECRET_KEY=<secret>
     NORDIGEN_ACCOUNT_ID=<account_id>
-    NOTIFY_PATTERN=<pattern>
     DISCORD_URL=<discord-webhook-url>
     ```
 
-3. Install the dependencies:
+3. Create a `.notify-patterns.json` file with the transaction patterns to notify:
+    ```json
+    [
+        {
+            "name": "salary",
+            "pattern": "Weyland-Yutani"
+        },
+        {
+            "name": "mortgage",
+            "pattern": "Goliath National Bank"
+        }
+    ]
+    ```
+    Patterns are tested against the transaction description.
+    If you need to update them later, edit the file above and run `./scripts/put-patterns.sh`.
+
+4. Install the dependencies:
     ```shell
     npm i
     ```
 
-4. Run the bootstrap script to create all the resources and deploy:
+5. Run the bootstrap script to create all the resources and deploy:
     ```shell
     npm run bootstrap
     ```
