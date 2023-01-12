@@ -15,7 +15,6 @@ export interface Env {
 	NORDIGEN_SECRET_KEY: string;
 	NORDIGEN_ACCOUNT_ID: string;
 	NORDIGEN_AGREEMENT_ID: string;
-	NOTIFY_PATTERN: string;
 	DISCORD_URL: string;
 	KV: KVNamespace;
 	DB: D1Database;
@@ -29,6 +28,8 @@ const DAYS_TO_FETCH = 2;
 const NOTIFY_EXPIRATION_DAYS = 7;
 // key in KV to store date when we last notified agreement expiration
 const NOTIFY_EXPIRATION_KEY = "agreement-expiration-notified";
+// key in KV to store match transaction patterns
+const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
 const NORDIGEN_HOST = "https://ob.nordigen.com"
 
@@ -61,6 +62,11 @@ type NordigenTransactions = {
 		booked: BankTransaction[];
 		pending: BankTransaction[];
 	}
+}
+
+type TransactionMatcher = {
+	name: string;
+	pattern: string;
 }
 
 async function fetchNordigenToken(
@@ -223,11 +229,26 @@ async function notifyDiscord(
 	});
 }
 
+async function fetchTransactionMatchers(kv: KVNamespace): Promise<TransactionMatcher[]> {
+	const matchersRaw = await kv.get(TRANSACTION_MATCHERS_KEY);
+	if (matchersRaw === null) {
+		return [] as TransactionMatcher[];
+	}
+
+	return JSON.parse(matchersRaw) as TransactionMatcher[];
+}
+
 async function execute(env: Env) {
 	try {
 		await doExecute(env);
-	} catch (e) {
-		console.error("error", e);
+	} catch (e: any) {
+		const stringed = JSON.stringify(e);
+		console.error("stringed", stringed);
+		console.error("type of", typeof e);
+		console.error("properties", e.message, e.lineNumber, e.fileName. e.stack);
+		for(var property in e){
+			console.log("error props", e[property]);
+		}
 	}
 }
 
@@ -257,23 +278,33 @@ async function doExecute(env: Env) {
 	// store transactions in DB
 	await storeBankTransactions(env.DB, results.transactions.booked);
 
-	const re = RegExp(env.NOTIFY_PATTERN);
+	// read transaction matchers from KV
+	const transactionMatchers = await fetchTransactionMatchers(env.KV);
 
-	// list transactions with matching pattern
-	const matched = results.transactions.booked.filter(
-		(transaction) => re.test(transaction.remittanceInformationUnstructured)
-	);
+	// create map of matching transactions
+	const matched = new Map<string, BankTransaction>();
 
-	if (matched.length === 0) {
+	transactionMatchers.forEach(matcher => {
+		const re = RegExp(matcher.pattern);
+		results.transactions.booked.forEach(transaction => {
+			if (re.test(transaction.remittanceInformationUnstructured)) {
+				matched.set(matcher.name, transaction);
+			}
+		})
+	})
+
+	if (matched.size === 0) {
 		return;
 	}
 
-	console.log("matched", matched);
+	const matchedList = Array.from(matched.values());
+
+	console.log("matched", matchedList);
 
 	// list transactions which haven't yet been notified
-	const checkNotifiedResults = await checkNotifiedTransactions(env.DB, matched);
+	const checkNotifiedResults = await checkNotifiedTransactions(env.DB, matchedList);
 
-	const toNotify = matched.filter((_, index) => {
+	const toNotify = matchedList.filter((_, index) => {
 		const results = checkNotifiedResults[index].results;
 		return !results || results.length === 0
 	});
@@ -285,10 +316,10 @@ async function doExecute(env: Env) {
 	console.log("to notify", toNotify);
 
 	// notify transactions
-	matched.forEach(async tx => {
+	matched.forEach(async (tx, name) => {
 		await notifyDiscord(
 			env.DISCORD_URL,
-			generateTransactionNotification(env.NOTIFY_PATTERN, tx),
+			generateTransactionNotification(name, tx),
 		);
 	});
 
