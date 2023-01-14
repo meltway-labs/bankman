@@ -171,3 +171,7 @@ dist
 .dev.vars
 wrangler.toml
 .wrangler/
+
+# notify patterns
+
+.notify-patterns.json
