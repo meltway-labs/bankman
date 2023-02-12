@@ -273,13 +273,14 @@ async function doExecute(env: Env) {
 	const results = await fetchNordigenTransactions(token, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
 
 	console.log("booked", results.transactions.booked);
-	console.log("pending", results.transactions.pending);
 
 	// store transactions in DB
 	await storeBankTransactions(env.DB, results.transactions.booked);
 
 	// read transaction matchers from KV
 	const transactionMatchers = await fetchTransactionMatchers(env.KV);
+
+	console.log("matchers", transactionMatchers);
 
 	// create map of matching transactions
 	const matched = new Map<string, BankTransaction>();
