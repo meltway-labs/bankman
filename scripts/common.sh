@@ -1,3 +1,7 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
 NO_D1_WARNING=true
 export NO_D1_WARNING
 
@@ -9,6 +13,16 @@ export PURPLE="\033[1;35m"
 export CYAN="\033[1;36m"
 export GREY="\033[0;37m"
 export RESET="\033[m"
+
+check_wrangler() {
+    if ! npm exec --no -- wrangler --version &> /dev/null
+    then
+        # shellcheck disable=SC2016
+        print_error "wrangler could not be found. Did you run \`npm install\` ?"
+        print_error "Exiting."
+        exit 1
+    fi
+}
 
 check_command() {
     if ! command -v "$1" &> /dev/null
