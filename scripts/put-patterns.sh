@@ -18,4 +18,4 @@ fi
 # shellcheck disable=SC2034
 KV_ID=$(npx wrangler kv:namespace list | jq -r '.[] | select(.title == "bankman-KV") | .id')
 
-npx wrangler kv:key --namespace-id $KV_ID put 'transaction-matchers' "$(cat .notify-patterns.json | jq -c .)"
+npx wrangler kv:key --namespace-id "$KV_ID" put 'transaction-matchers' "$(jq -c . .notify-patterns.json)"

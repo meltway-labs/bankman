@@ -1,10 +1,10 @@
 # Getting started
 
 To run the project locally:
-    ```shell
-    npm i
-    npm start
-    ```
+```shell
+npm i
+npm start
+```
 
 You also need to run the database migrations:
 ```shell

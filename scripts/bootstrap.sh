@@ -12,13 +12,7 @@ check_command tr
 check_command grep
 check_command awk
 
-if ! npm exec --no -- wrangler --version &> /dev/null
-then
-    # shellcheck disable=SC2016
-    print_error "wrangler could not be found. Did you run \`npm install\` ?"
-    print_error "Exiting."
-    exit 1
-fi
+check_wrangler
 
 cp wrangler.toml.template wrangler.toml
 print_info "> Creating KV namespace"
@@ -28,12 +22,12 @@ KV_ID=$(npx wrangler kv:namespace list | jq -r '.[] | select(.title == "bankman-
 export KV_ID
 
 print_info "> Storing notify patterns in KV"
-npx wrangler kv:key --namespace-id $KV_ID put 'transaction-matchers' "$(cat .notify-patterns.json | jq -c .)"
+npx wrangler kv:key --namespace-id "$KV_ID" put 'transaction-matchers' "$(jq -c . .notify-patterns.json)"
 
 print_info "> Creating D1 database"
 npx wrangler d1 create bankmandb
 # shellcheck disable=SC2034
-DATABASE_ID=$(npx wrangler d1 list | grep bankman | awk '{print $2}')
+DATABASE_ID=$(npx wrangler d1 list | grep bankmandb | awk '{print $2}')
 export DATABASE_ID
 
 print_info "> Creating wrangler.toml"
