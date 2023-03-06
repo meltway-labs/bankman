@@ -359,11 +359,7 @@ async function doExecute(env: Env) {
 
 	const results = await fetchNordigenTransactions(token, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
 
-<<<<<<< Updated upstream
-	console.log("booked", results.transactions.booked);
-=======
 	console.log("storing booked transactions:", results.transactions.booked);
->>>>>>> Stashed changes
 
 	// store transactions in DB
 	await storeBankTransactions(env.DB, results.transactions.booked);
