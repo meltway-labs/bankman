@@ -28,6 +28,8 @@ const DAYS_TO_FETCH = 2;
 const NOTIFY_EXPIRATION_DAYS = 7;
 // key in KV to store date when we last notified agreement expiration
 const NOTIFY_EXPIRATION_KEY = "agreement-expiration-notified";
+// key in KV to store last account status
+const LAST_ACCOUNT_STATUS_KEY = "last-account-status";
 // key in KV to store match transaction patterns
 const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
@@ -44,6 +46,16 @@ async function checkNotifiedToday(kv: KVNamespace): Promise<boolean> {
 async function markNotifiedToday(kv: KVNamespace): Promise<void> {
 	const today = new Date().toISOString().split("T")[0];
 	await kv.put(NOTIFY_EXPIRATION_KEY, today);
+}
+
+// gets latest account status from KV
+async function getLatestAccountStatus(kv: KVNamespace): Promise<string | null> {
+	return await kv.get(LAST_ACCOUNT_STATUS_KEY);
+}
+
+// dets latest account status in KV
+async function setLatestAccountStatus(kv: KVNamespace, status: string) {
+	return await kv.put(LAST_ACCOUNT_STATUS_KEY, status);
 }
 
 type BankTransaction = {
@@ -88,6 +100,27 @@ async function fetchNordigenToken(
 	return resp.json().then((data: any) => data.access);
 }
 
+async function fetchNordigenAccountStatus(
+	token: string,
+	accountId: string,
+): Promise<string> {
+	const url = NORDIGEN_HOST + `/api/v2/accounts/${accountId}`;
+
+	const resp = await fetch(url, {
+		method: "GET",
+		headers: {
+			"Accept": "application/json",
+			"Authorization": "Bearer " + token
+		},
+	});
+
+	if (resp.status !== 200) {
+		throw Error(`get nordigen account status yielded (${resp.status}): (${resp.statusText})`);
+	}
+
+	return resp.json<{ status: string }>().then((data) => data.status);
+}
+
 async function fetchNordigenTransactions(
 	token: string,
 	accountId: string,
@@ -109,6 +142,10 @@ async function fetchNordigenTransactions(
 			"Authorization": "Bearer " + token
 		},
 	});
+
+	if (resp.status !== 200) {
+		throw Error(`fetch nordigen transactions yielded (${resp.status}): (${resp.statusText})`);
+	}
 
 	return resp.json().then((data: any) => data);
 }
@@ -229,6 +266,28 @@ async function notifyDiscord(
 	});
 }
 
+async function reportAccountStatus(
+	discordUrl: string,
+	accountId: string,
+	status: string,
+) {
+	let msg = `account '${accountId}' has unknown status: ${status}`;
+
+	switch (status.toUpperCase()) {
+		case "SUSPENDED":
+			msg = `❌ account '${accountId}' has been ${status}!`;
+			break;
+		case "ERROR":
+			msg = `❌ account '${accountId}' is in ${status}, this may be temporary.`;
+			break;
+		case "READY":
+			msg = `✅ account '${accountId}' is now ready.`;
+			break;
+	}
+
+	return await notifyDiscord(discordUrl, msg);
+}
+
 async function fetchTransactionMatchers(kv: KVNamespace): Promise<TransactionMatcher[]> {
 	const matchersRaw = await kv.get(TRANSACTION_MATCHERS_KEY);
 	if (matchersRaw === null) {
@@ -242,18 +301,44 @@ async function execute(env: Env) {
 	try {
 		await doExecute(env);
 	} catch (e: any) {
+		console.error("execution failed:", e);
 		const stringed = JSON.stringify(e);
 		console.error("stringed", stringed);
 		console.error("type of", typeof e);
-		console.error("properties", e.message, e.lineNumber, e.fileName. e.stack);
-		for(var property in e){
+		for (var property in e) {
 			console.log("error props", e[property]);
 		}
 	}
 }
 
 async function doExecute(env: Env) {
+	console.log("fetching nordigen token");
+
+	// fetch token first
 	const token = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
+
+	console.log("fetching nordigen account status");
+
+	// check account status before proceeding
+	const status = await fetchNordigenAccountStatus(token, env.NORDIGEN_ACCOUNT_ID)
+
+	console.log("comparing nordigen account status with previous");
+
+	// get latest account status
+	const previousStatus = await getLatestAccountStatus(env.KV);
+
+	console.log(`nordigen account status: ${status} (was ${previousStatus})`);
+
+	if (previousStatus === null || previousStatus.toUpperCase() !== status.toUpperCase()) {
+		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, status);
+		await setLatestAccountStatus(env.KV, status);
+	}
+
+	if (status === "SUSPENDED" || status === "ERROR") {
+		throw Error(`unable to proceed with status ${env.NORDIGEN_ACCOUNT_ID}`);
+	}
+
+	console.log("fetching nordigen agreement expiration");
 
 	// check agreement expiration and notify if needed
 	const expirationDays = await fetchNordigenAgreementExpiration(token, env.NORDIGEN_AGREEMENT_ID);
@@ -266,16 +351,24 @@ async function doExecute(env: Env) {
 		}
 	}
 
+	console.log("fetching transactions (nordigen agreement still valid)");
+
 	// prepare to get transactions
 	const dateFrom = new Date(Date.now() - DAYS_TO_FETCH * ONE_DAY_MS).toISOString().split("T")[0]; // X days ago
 	const dateTo = new Date(Date.now()).toISOString().split("T")[0]; // today
 
 	const results = await fetchNordigenTransactions(token, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
 
+<<<<<<< Updated upstream
 	console.log("booked", results.transactions.booked);
+=======
+	console.log("storing booked transactions:", results.transactions.booked);
+>>>>>>> Stashed changes
 
 	// store transactions in DB
 	await storeBankTransactions(env.DB, results.transactions.booked);
+
+	console.log("reading transaction matchers from KV");
 
 	// read transaction matchers from KV
 	const transactionMatchers = await fetchTransactionMatchers(env.KV);
@@ -295,12 +388,13 @@ async function doExecute(env: Env) {
 	})
 
 	if (matched.size === 0) {
+		console.log("no matching transactions");
 		return;
 	}
 
 	const matchedList = Array.from(matched.values());
 
-	console.log("matched", matchedList);
+	console.log("found matching transactions:", matchedList);
 
 	// list transactions which haven't yet been notified
 	const checkNotifiedResults = await checkNotifiedTransactions(env.DB, matchedList);
@@ -311,10 +405,11 @@ async function doExecute(env: Env) {
 	});
 
 	if (toNotify.length === 0) {
+		console.log("no transactions to notify");
 		return;
 	}
 
-	console.log("to notify", toNotify);
+	console.log("found transactions to notify:", toNotify);
 
 	// notify transactions
 	matched.forEach(async (tx, name) => {
@@ -323,6 +418,8 @@ async function doExecute(env: Env) {
 			generateTransactionNotification(name, tx),
 		);
 	});
+
+	console.log("storing notified transactions");
 
 	await storeNotifiedTransactions(env.DB, toNotify);
 }
