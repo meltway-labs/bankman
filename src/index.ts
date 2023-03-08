@@ -25,16 +25,17 @@ const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
 const NORDIGEN_HOST = "https://ob.nordigen.com"
 
-// Use a very basic buffered logger
+// Buffer logs in array.
 var logsBuffer: object[] = [];
-var logContext = {};
-const logMessage = (level: string, ctx: object, ...data: any[]) => {
-	let method = console.info;
-	if (level === "error") {
-		method = console.error;
-	}
 
+// Use a common context for logs.
+var logContext = {};
+
+// Log messages with level and context.
+const logMessage = (level: string, ctx: object, ...data: any[]) => {
+	const method = level === "error" ? console.error : console.info;
 	method(...data);
+
 	logsBuffer.push({
 		...ctx,
 		level,
@@ -43,6 +44,7 @@ const logMessage = (level: string, ctx: object, ...data: any[]) => {
 	});
 };
 
+// Basic logger implementation with only info and error level.
 const logger = {
 	info: (...data: any[]) => logMessage("info", logContext, ...data),
 	error: (...data: any[]) => logMessage("error", logContext, ...data),
