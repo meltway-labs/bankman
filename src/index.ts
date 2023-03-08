@@ -1,15 +1,4 @@
-/**
- * Welcome to Cloudflare Workers! This is your first scheduled worker.
- *
- * - Run `wrangler dev --local` in your terminal to start a development server
- * - Run `curl "http://localhost:8787/cdn-cgi/mf/scheduled"` to trigger the scheduled event
- * - Go back to the console to see what your worker has logged
- * - Update the Cron trigger in wrangler.toml (see https://developers.cloudflare.com/workers/wrangler/configuration/#triggers)
- * - Run `wrangler publish --name my-worker` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/runtime-apis/scheduled-event/
- */
-
+// Env interface defines all expected environment variables
 export interface Env {
 	NORDIGEN_SECRET_ID: string;
 	NORDIGEN_SECRET_KEY: string;
@@ -18,6 +7,7 @@ export interface Env {
 	DISCORD_URL: string;
 	KV: KVNamespace;
 	DB: D1Database;
+	REVISION: string;
 }
 
 // one day in milliseconds
@@ -34,6 +24,29 @@ const LAST_ACCOUNT_STATUS_KEY = "last-account-status";
 const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
 const NORDIGEN_HOST = "https://ob.nordigen.com"
+
+// Use a very basic buffered logger
+var logsBuffer: object[] = [];
+var logContext = {};
+const logMessage = (level: string, ctx: object, ...data: any[]) => {
+	let method = console.info;
+	if (level === "error") {
+		method = console.error;
+	}
+
+	method(...data);
+	logsBuffer.push({
+		...ctx,
+		level,
+		date: new Date().toISOString(),
+		msg: String(data)
+	});
+};
+
+const logger = {
+	info: (...data: any[]) => logMessage("info", logContext, ...data),
+	error: (...data: any[]) => logMessage("error", logContext, ...data),
+};
 
 // checks in KV if we notified agreement expiration today
 async function checkNotifiedToday(kv: KVNamespace): Promise<boolean> {
@@ -237,6 +250,27 @@ async function storeNotifiedTransactions(
 	return await db.batch(statements);
 }
 
+async function storeExecutionLogs(
+	db: D1Database,
+	revision: string,
+	logs: object[],
+): Promise<D1Result[]> {
+	const statement = db.prepare(
+		`
+			INSERT INTO execution_logs
+			(revision, created_at, logs)
+			VALUES
+			(?, ?, ?);
+		`
+	).bind(
+		revision,
+		new Date(Date.now()).toISOString(),
+		JSON.stringify(logs),
+	);
+
+	return await db.batch([statement]);
+}
+
 function generateTransactionNotification(
 	pattern: string,
 	tx: BankTransaction,
@@ -298,36 +332,44 @@ async function fetchTransactionMatchers(kv: KVNamespace): Promise<TransactionMat
 }
 
 async function execute(env: Env) {
+	const revision = env.REVISION || "unknown";
+
+	logContext = {
+		revision: revision,
+	};
+
 	try {
 		await doExecute(env);
 	} catch (e: any) {
-		console.error("execution failed:", e);
+		logger.error("execution failed:", e);
 		const stringed = JSON.stringify(e);
-		console.error("stringed", stringed);
-		console.error("type of", typeof e);
+		logger.error("stringed", stringed);
+		logger.error("type of", typeof e);
 		for (var property in e) {
-			console.log("error props", e[property]);
+			logger.info("error props", e[property]);
 		}
 	}
+
+	await storeExecutionLogs(env.DB, revision, logsBuffer);
 }
 
 async function doExecute(env: Env) {
-	console.log("fetching nordigen token");
+	logger.info("fetching nordigen token");
 
 	// fetch token first
 	const token = await fetchNordigenToken(env.NORDIGEN_SECRET_ID, env.NORDIGEN_SECRET_KEY);
 
-	console.log("fetching nordigen account status");
+	logger.info("fetching nordigen account status");
 
 	// check account status before proceeding
 	const status = await fetchNordigenAccountStatus(token, env.NORDIGEN_ACCOUNT_ID)
 
-	console.log("comparing nordigen account status with previous");
+	logger.info("comparing nordigen account status with previous");
 
 	// get latest account status
 	const previousStatus = await getLatestAccountStatus(env.KV);
 
-	console.log(`nordigen account status: ${status} (was ${previousStatus})`);
+	logger.info(`nordigen account status: ${status} (was ${previousStatus})`);
 
 	if (previousStatus === null || previousStatus.toUpperCase() !== status.toUpperCase()) {
 		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, status);
@@ -338,7 +380,7 @@ async function doExecute(env: Env) {
 		throw Error(`unable to proceed with status ${env.NORDIGEN_ACCOUNT_ID}`);
 	}
 
-	console.log("fetching nordigen agreement expiration");
+	logger.info("fetching nordigen agreement expiration");
 
 	// check agreement expiration and notify if needed
 	const expirationDays = await fetchNordigenAgreementExpiration(token, env.NORDIGEN_AGREEMENT_ID);
@@ -351,7 +393,7 @@ async function doExecute(env: Env) {
 		}
 	}
 
-	console.log("fetching transactions (nordigen agreement still valid)");
+	logger.info("fetching transactions (nordigen agreement still valid)");
 
 	// prepare to get transactions
 	const dateFrom = new Date(Date.now() - DAYS_TO_FETCH * ONE_DAY_MS).toISOString().split("T")[0]; // X days ago
@@ -359,17 +401,17 @@ async function doExecute(env: Env) {
 
 	const results = await fetchNordigenTransactions(token, env.NORDIGEN_ACCOUNT_ID, dateFrom, dateTo);
 
-	console.log("storing booked transactions:", results.transactions.booked);
+	logger.info("storing booked transactions:", results.transactions.booked.length);
 
 	// store transactions in DB
 	await storeBankTransactions(env.DB, results.transactions.booked);
 
-	console.log("reading transaction matchers from KV");
+	logger.info("reading transaction matchers from KV");
 
 	// read transaction matchers from KV
 	const transactionMatchers = await fetchTransactionMatchers(env.KV);
 
-	console.log("matchers", transactionMatchers);
+	logger.info("matchers:", transactionMatchers);
 
 	// create map of matching transactions
 	const matched = new Map<string, BankTransaction>();
@@ -384,13 +426,13 @@ async function doExecute(env: Env) {
 	})
 
 	if (matched.size === 0) {
-		console.log("no matching transactions");
+		logger.info("no matching transactions");
 		return;
 	}
 
 	const matchedList = Array.from(matched.values());
 
-	console.log("found matching transactions:", matchedList);
+	logger.info("found matching transactions:", matchedList);
 
 	// list transactions which haven't yet been notified
 	const checkNotifiedResults = await checkNotifiedTransactions(env.DB, matchedList);
@@ -401,11 +443,11 @@ async function doExecute(env: Env) {
 	});
 
 	if (toNotify.length === 0) {
-		console.log("no transactions to notify");
+		logger.info("no transactions to notify");
 		return;
 	}
 
-	console.log("found transactions to notify:", toNotify);
+	logger.info("found transactions to notify:", toNotify);
 
 	// notify transactions
 	matched.forEach(async (tx, name) => {
@@ -415,7 +457,7 @@ async function doExecute(env: Env) {
 		);
 	});
 
-	console.log("storing notified transactions");
+	logger.info("storing notified transactions");
 
 	await storeNotifiedTransactions(env.DB, toNotify);
 }
