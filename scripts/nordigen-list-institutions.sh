@@ -11,7 +11,7 @@ usage() {
     integration/quickstart_guide/ for more details."
 }
 
-if [ $# -lt 1 ]
+if [ $# -ne 1 ]
 then
     usage
     exit 1
