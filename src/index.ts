@@ -24,6 +24,8 @@ const LAST_ACCOUNT_STATUS_KEY = "last-account-status";
 const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
 const NORDIGEN_HOST = "https://ob.nordigen.com"
+// account status error retry interval in milliseconds
+const ACCOUNT_STATUS_ERROR_RETRY_MS = 1000 * 3600 * 6; // 6 hours
 
 // Buffer logs in array.
 var logsBuffer: object[] = [];
@@ -63,14 +65,43 @@ async function markNotifiedToday(kv: KVNamespace): Promise<void> {
 	await kv.put(NOTIFY_EXPIRATION_KEY, today);
 }
 
-// gets latest account status from KV
-async function getLatestAccountStatus(kv: KVNamespace): Promise<string | null> {
-	return await kv.get(LAST_ACCOUNT_STATUS_KEY);
+type AccountStatus = {
+	status: string,
+	updated_at: string,
 }
 
-// dets latest account status in KV
+function accountStatusEquals(a: AccountStatus | null, status: string): boolean {
+	if (!a) {
+		return false;
+	}
+	return a.status.toUpperCase() === status.toUpperCase();
+}
+
+function accountStatusAge(status: AccountStatus): number {
+	const created = new Date(status.updated_at);
+	const now = new Date();
+	return now.getTime() - created.getTime();
+}
+
+// gets latest account status from KV
+async function getLatestAccountStatus(kv: KVNamespace): Promise<AccountStatus | null> {
+	let payload = await kv.get(LAST_ACCOUNT_STATUS_KEY);
+	if (!payload) {
+		return null;
+	}
+
+	return JSON.parse(payload) as AccountStatus;
+}
+
+// sets latest account status in KV
 async function setLatestAccountStatus(kv: KVNamespace, status: string) {
-	return await kv.put(LAST_ACCOUNT_STATUS_KEY, status);
+	return await kv.put(
+		LAST_ACCOUNT_STATUS_KEY,
+		JSON.stringify({
+			updated_at: new Date().toISOString(),
+			status,
+		} as AccountStatus)
+	);
 }
 
 type BankTransaction = {
@@ -371,15 +402,25 @@ async function doExecute(env: Env) {
 	// get latest account status
 	const previousStatus = await getLatestAccountStatus(env.KV);
 
-	logger.info(`nordigen account status: ${status} (was ${previousStatus})`);
+	logger.info(`nordigen account status: ${status} (was ${previousStatus && previousStatus.status})`);
 
-	if (previousStatus === null || previousStatus.toUpperCase() !== status.toUpperCase()) {
+	if (!accountStatusEquals(previousStatus, status)) {
 		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, status);
 		await setLatestAccountStatus(env.KV, status);
 	}
 
+	if (accountStatusEquals(previousStatus, "ERROR")) {
+		// check if status has been in error for too long
+		if (accountStatusAge(previousStatus!) < ACCOUNT_STATUS_ERROR_RETRY_MS) {
+			throw Error(`unable to proceed with account status ${status} (${env.NORDIGEN_ACCOUNT_ID})`);
+		}
+
+		// assume status may be READY by fetching transactions
+		logger.info(`nordigen account status was ERROR at ${previousStatus!.updated_at}, but retrying)`);
+	}
+
 	if (status === "SUSPENDED" || status === "ERROR") {
-		throw Error(`unable to proceed with status ${env.NORDIGEN_ACCOUNT_ID}`);
+		throw Error(`unable to proceed with account status ${status} (${env.NORDIGEN_ACCOUNT_ID})`);
 	}
 
 	logger.info("fetching nordigen agreement expiration");
@@ -406,7 +447,17 @@ async function doExecute(env: Env) {
 	logger.info("storing booked transactions:", results.transactions.booked.length);
 
 	// store transactions in DB
-	await storeBankTransactions(env.DB, results.transactions.booked);
+	if (results.transactions.booked.length > 0) {
+		await storeBankTransactions(env.DB, results.transactions.booked);
+	}
+
+	// if we've made it this far and the previous status was ERROR,
+	// we can assume it's now READY
+	if (accountStatusEquals(previousStatus, "ERROR")) {
+		await setLatestAccountStatus(env.KV, "READY");
+		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, "READY");
+		logger.info("account status was ERROR, but is now READY");
+	}
 
 	logger.info("reading transaction matchers from KV");
 
