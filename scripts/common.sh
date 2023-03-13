@@ -43,3 +43,11 @@ print_info() {
 print_success() {
     echo -e "${GREEN}$1${RESET}"
 }
+
+get_nordigen_token() {
+    curl -X POST "https://ob.nordigen.com/api/v2/token/new/" \
+  -H "accept: application/json" \
+  -H  "Content-Type: application/json" \
+  -d "{\"secret_id\":\"$1\", \"secret_key\":\"$2\"}" | \
+  jq .access -r
+}
