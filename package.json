@@ -10,8 +10,9 @@
   "private": true,
   "scripts": {
     "bootstrap": "./scripts/bootstrap.sh",
-    "deploy": "wrangler publish --name bankman",
+    "deploy": "wrangler publish --name bankman --var REVISION:$(git describe --abbrev=7 HEAD)",
     "start": "wrangler dev --local",
-    "teardown": "./scripts/teardown.sh"
+    "teardown": "./scripts/teardown.sh",
+    "logs": "wrangler d1 execute bankmandb --command 'select logs from execution_logs order by created_at desc limit 1' --json | jq '.[0].results[0].logs' -r | jq '.[] | .date + \" (\" + .revision + \") \" + .level + \" - \" + .msg '"
   }
 }
