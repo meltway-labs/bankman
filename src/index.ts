@@ -419,7 +419,7 @@ async function doExecute(env: Env) {
 		logger.info(`nordigen account status was ERROR at ${previousStatus!.updated_at}, but retrying)`);
 	}
 
-	if (status === "SUSPENDED" || status === "ERROR") {
+	if (status === "SUSPENDED") {
 		throw Error(`unable to proceed with account status ${status} (${env.NORDIGEN_ACCOUNT_ID})`);
 	}
 
