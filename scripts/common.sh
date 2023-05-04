@@ -51,4 +51,3 @@ get_nordigen_token() {
   -d "{\"secret_id\":\"$1\", \"secret_key\":\"$2\"}" | \
   jq .access -r
 }
-
