@@ -3,7 +3,7 @@
 DROP TABLE IF EXISTS execution_logs;
 
 CREATE TABLE execution_logs (
-  revision VARCHAR(20) NOT NULL
+  revision VARCHAR(20) NOT NULL,
   created_at DATE NOT NULL,
   logs BLOB
 );
