@@ -27,7 +27,7 @@ npx wrangler kv:key --namespace-id "$KV_ID" put 'transaction-matchers' "$(jq -c 
 print_info "> Creating D1 database"
 npx wrangler d1 create bankmandb
 # shellcheck disable=SC2034
-DATABASE_ID=$(npx wrangler d1 list | grep bankmandb | awk '{print $2}')
+DATABASE_ID=$(npx wrangler d1 list  --json | jq '.[] | select(.name == "bankmandb") | .uuid' -r)
 export DATABASE_ID
 
 print_info "> Creating wrangler.toml"
