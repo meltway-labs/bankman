@@ -95,7 +95,7 @@ Make sure you've followed the instructions in [Pre-requisites](pre-requisites) a
 
 The `REFERENCE` can be any value as long as it is different from the one used for last time you've linked an agreement.
 
-If by any change you're missing the `<agreement-id>`, you can list your account agreements with:
+If by any chance you're missing the `<agreement-id>`, you can list your account's agreements with:
 
 ```shell
 ./scripts/nordigen-list-agreements.sh
