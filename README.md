@@ -64,3 +64,39 @@ In order to send notifications, we currently only support Discord Webhooks.
     ```shell
     npm run bootstrap
     ```
+
+## Renewing end user agreement
+
+By default, every 90 days the end user agreement must be renewed.
+
+7 days before end user agreement expires, bankman sends a notification to Discord which looks like this:
+
+> End user agreement expires in 7 days.
+
+Until renewal, a similar notification is sent every day.
+
+Bankman comes with a few simple scripts to ease the renewal process.
+Make sure you've followed the instructions in [Pre-requisites](pre-requisites) and [Getting Started](getting-started).
+
+1. Pick the institution ID you want to use for the agreement, you can list them with (use your country code):
+    ```shell
+    ./scripts/nordigen-list-institutions.sh <country-code>
+    ```
+
+2. Create a new user agreement with the institution ID:
+    ```shell
+    ./scripts/nordigen-create-agreement.sh <institution-id>
+    ```
+
+3. Use the `id` field in the result of the script above as the `<agreement-id>` that follows:
+    ```shell
+    REFERENCE=$(date +%Y%m%d) ./scripts/nordigen-link-agreement.sh <agreement-id>
+    ```
+
+The `REFERENCE` can be any value as long as it is different from the one used for last time you've linked an agreement.
+
+If by any change you're missing the `<agreement-id>`, you can list your account agreements with:
+
+```shell
+./scripts/nordigen-list-agreements.sh
+```
