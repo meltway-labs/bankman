@@ -205,7 +205,7 @@ async function fetchNordigenAgreementExpiration(
 
 	const url = byId ?
 		NORDIGEN_HOST + `/api/v2/agreements/enduser/${id}/` :
-		NORDIGEN_HOST + `/api/v2/agreements/enduser/?limit=1`;
+		NORDIGEN_HOST + `/api/v2/agreements/enduser/`;
 
 	const resp = await fetch(url, {
 		headers: {
@@ -226,7 +226,7 @@ async function fetchNordigenAgreementExpiration(
 		agreement = await resp.json<Agreement>();
 	} else {
 		agreement = await resp.json<{ results: Agreement[] }>().then(
-			data => data.results[0]
+			data => data.results[data.results.length - 1]
 		);
 	}
 
