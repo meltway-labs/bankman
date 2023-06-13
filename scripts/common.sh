@@ -51,3 +51,11 @@ get_nordigen_token() {
   -d "{\"secret_id\":\"$1\", \"secret_key\":\"$2\"}" | \
   jq .access -r
 }
+
+get_agreements() {
+    curl -X GET "https://ob.nordigen.com/api/v2/agreements/enduser/" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H  "Authorization: Bearer $1" | \
+  jq .
+}
