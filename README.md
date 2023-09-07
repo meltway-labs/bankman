@@ -100,3 +100,11 @@ If by any chance you're missing the `<agreement-id>`, you can list your account'
 ```shell
 ./scripts/nordigen-list-agreements.sh
 ```
+
+4. Click the link returned in the response object under the field `link` and follow the instructions to approve the new agreement for your bank account.
+
+If by any chance you lose the response object with the link, you can list your account's requisitions with:
+
+```shell
+./scripts/nordigen-list-requisitions.sh
+```
