@@ -93,7 +93,7 @@ Make sure you've followed the instructions in [Pre-requisites](pre-requisites) a
     REFERENCE=$(date +%Y%m%d) ./scripts/nordigen-link-agreement.sh <agreement-id>
     ```
 
-The `REFERENCE` can be any value as long as it is different from the one used for last time you've linked an agreement.
+The `REFERENCE` can be any value as long as it is different from the one used last time you linked an agreement.
 
 If by any chance you're missing the `<agreement-id>`, you can list your account's agreements with:
 
