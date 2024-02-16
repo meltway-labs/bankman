@@ -23,7 +23,7 @@ const LAST_ACCOUNT_STATUS_KEY = "last-account-status";
 // key in KV to store match transaction patterns
 const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 // Nordigen API host
-const NORDIGEN_HOST = "https://ob.nordigen.com"
+const NORDIGEN_HOST = "https://bankaccountdata.gocardless.com"
 // account status error retry interval in milliseconds
 const ACCOUNT_STATUS_ERROR_RETRY_MS = 1000 * 3600 * 6; // 6 hours
 

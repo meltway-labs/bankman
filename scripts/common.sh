@@ -45,7 +45,7 @@ print_success() {
 }
 
 get_nordigen_token() {
-    curl -X POST "https://ob.nordigen.com/api/v2/token/new/" \
+    curl -X POST "https://bankaccountdata.gocardless.com/api/v2/token/new/" \
   -H "accept: application/json" \
   -H  "Content-Type: application/json" \
   -d "{\"secret_id\":\"$1\", \"secret_key\":\"$2\"}" | \
@@ -53,7 +53,7 @@ get_nordigen_token() {
 }
 
 get_agreements() {
-    curl -X GET "https://ob.nordigen.com/api/v2/agreements/enduser/" \
+    curl -X GET "https://bankaccountdata.gocardless.com/api/v2/agreements/enduser/" \
   -H "accept: application/json" \
   -H "Content-Type: application/json" \
   -H  "Authorization: Bearer $1" | \

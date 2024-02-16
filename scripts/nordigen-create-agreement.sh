@@ -21,7 +21,7 @@ export $(xargs < .dev.vars)
 
 TOKEN=$(get_nordigen_token $NORDIGEN_SECRET_ID $NORDIGEN_SECRET_KEY)
 
-curl -X POST "https://ob.nordigen.com/api/v2/agreements/enduser/" \
+curl -X POST "https://bankaccountdata.gocardless.com/api/v2/agreements/enduser/" \
   -H  "accept: application/json" \
   -H  "Content-Type: application/json" \
   -H  "Authorization: Bearer ${TOKEN}" \
