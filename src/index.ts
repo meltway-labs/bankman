@@ -26,6 +26,8 @@ const TRANSACTION_MATCHERS_KEY = "transaction-matchers";
 const NORDIGEN_HOST = "https://bankaccountdata.gocardless.com"
 // account status error retry interval in milliseconds
 const ACCOUNT_STATUS_ERROR_RETRY_MS = 1000 * 3600 * 6; // 6 hours
+// account status considered critical after being in error for too long
+const ACCOUNT_STATUS_CRITICAL_AFTER_MS = 1000 * 3600 * 24; // 24 hours
 
 // Buffer logs in array.
 var logsBuffer: object[] = [];
@@ -83,8 +85,8 @@ function accountStatusAge(status: AccountStatus): number {
 	return now.getTime() - created.getTime();
 }
 
-// gets latest account status from KV
-async function getLatestAccountStatus(kv: KVNamespace): Promise<AccountStatus | null> {
+// gets stored account status from KV
+async function getStoredAccountStatus(kv: KVNamespace): Promise<AccountStatus | null> {
 	let payload = await kv.get(LAST_ACCOUNT_STATUS_KEY);
 	if (!payload) {
 		return null;
@@ -93,8 +95,8 @@ async function getLatestAccountStatus(kv: KVNamespace): Promise<AccountStatus | 
 	return JSON.parse(payload) as AccountStatus;
 }
 
-// sets latest account status in KV
-async function setLatestAccountStatus(kv: KVNamespace, status: string) {
+// sets stored account status in KV
+async function setStoredAccountStatus(kv: KVNamespace, status: string) {
 	return await kv.put(
 		LAST_ACCOUNT_STATUS_KEY,
 		JSON.stringify({
@@ -102,6 +104,26 @@ async function setLatestAccountStatus(kv: KVNamespace, status: string) {
 			status,
 		} as AccountStatus)
 	);
+}
+
+// updatedStatus returns the new status based on the current and previous status
+function updatedStatus(previous: AccountStatus | null, current: string): string {
+	if (!previous) {
+		return current;
+	}
+
+	if (accountStatusEquals(previous, current)) {
+		return current;
+	}
+
+	// check if we're in error for too long
+	if (accountStatusEquals(previous, "ERROR") && current == "ERROR") {
+		if (accountStatusAge(previous) > ACCOUNT_STATUS_CRITICAL_AFTER_MS) {
+			return "CRITICAL";
+		}
+	}
+
+	return current;
 }
 
 type BankTransaction = {
@@ -347,6 +369,9 @@ async function reportAccountStatus(
 		case "ERROR":
 			msg = `❌ account '${accountId}' is in ${status}, this may be temporary.`;
 			break;
+		case "CRITICAL":
+			msg = `❌ account '${accountId}' is in ${status}, this requires immediate attention.`;
+			break;
 		case "READY":
 			msg = `✅ account '${accountId}' is now ready.`;
 			break;
@@ -394,29 +419,38 @@ async function doExecute(env: Env) {
 
 	logger.info("fetching nordigen account status");
 
-	// check account status before proceeding
-	const status = await fetchNordigenAccountStatus(token, env.NORDIGEN_ACCOUNT_ID)
+	// check current account status before proceeding
+	const currentStatus = await fetchNordigenAccountStatus(token, env.NORDIGEN_ACCOUNT_ID)
 
-	logger.info("comparing nordigen account status with previous");
+	logger.info("comparing current account status with stored");
 
-	// get latest account status
-	const previousStatus = await getLatestAccountStatus(env.KV);
+	// get stored account status
+	const storedStatus = await getStoredAccountStatus(env.KV);
 
-	logger.info(`nordigen account status: ${status} (was ${previousStatus && previousStatus.status})`);
+	// compute updated status
+	const status = updatedStatus(storedStatus, currentStatus);
 
-	if (!accountStatusEquals(previousStatus, status)) {
-		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, status);
-		await setLatestAccountStatus(env.KV, status);
+	logger.info(`nordigen account status: ${status} (was ${storedStatus && storedStatus.status})`);
+
+	const changedStatus = !accountStatusEquals(storedStatus, status);
+	if (changedStatus) {
+		// report only if status is CRITICAL or was CRITICAL and is now READY
+		const isCritical = status === "CRITICAL";
+		const wasCritical = accountStatusEquals(storedStatus, "CRITICAL") && status === "READY";
+		if (isCritical || wasCritical) {
+			await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, status);
+		}
+		await setStoredAccountStatus(env.KV, status);
 	}
 
-	if (accountStatusEquals(previousStatus, "ERROR")) {
+	if (status === "ERROR" || status === "CRITICAL") {
 		// check if status has been in error for too long
-		if (accountStatusAge(previousStatus!) < ACCOUNT_STATUS_ERROR_RETRY_MS) {
+		if (accountStatusAge(storedStatus!) < ACCOUNT_STATUS_ERROR_RETRY_MS) {
 			throw Error(`unable to proceed with account status ${status} (${env.NORDIGEN_ACCOUNT_ID})`);
 		}
 
 		// assume status may be READY by fetching transactions
-		logger.info(`nordigen account status was ERROR at ${previousStatus!.updated_at}, but retrying)`);
+		logger.info(`nordigen account status was ERROR at ${storedStatus!.updated_at}, but retrying)`);
 	}
 
 	if (status === "SUSPENDED") {
@@ -451,12 +485,16 @@ async function doExecute(env: Env) {
 		await storeBankTransactions(env.DB, results.transactions.booked);
 	}
 
-	// if we've made it this far and the previous status was ERROR,
+	// if we've made it this far and the current status was ERROR,
 	// we can assume it's now READY
-	if (accountStatusEquals(previousStatus, "ERROR")) {
-		await setLatestAccountStatus(env.KV, "READY");
-		await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, "READY");
-		logger.info("account status was ERROR, but is now READY");
+	if (status === "ERROR" || status === "CRITICAL") {
+		await setStoredAccountStatus(env.KV, "READY");
+
+		// only report if status was CRITICAL before
+		if (status === "CRITICAL") {
+			await reportAccountStatus(env.DISCORD_URL, env.NORDIGEN_ACCOUNT_ID, "READY");
+			logger.info("account status was ERROR, but is now READY");
+		}
 	}
 
 	logger.info("reading transaction matchers from KV");
