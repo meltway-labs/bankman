@@ -7,7 +7,7 @@ kv_namespaces = [
 ]
 
 [triggers]
-crons = [ "0 * * * *" ]
+crons = [ "0 13 * * *" ]
 
 [[ d1_databases ]]
 binding = "DB"
